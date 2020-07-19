@@ -46,7 +46,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define MAX_LENGTH 3500
+#define MAX_LENGTH 3000
 #define BLOCK_SIZE 16
 #define COEFF_SIZE 64
 /* USER CODE END PD */
@@ -76,7 +76,7 @@ static float32_t pulse_noDC;
  */
 NIBP_Struct NIBP;
 FIR_filter_Struct pulse_filter;
-FIR_filter_Struct envelop_filter;
+envelop_filter_Struct envelop_filter;
 float32_t limp_bp[3];
 
 /* USER CODE END PV */
@@ -127,7 +127,7 @@ int main(void)
   MX_TIM5_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
-  HAL_TIM_Base_Start_IT(&htim2); //50 sample/s => 25 sample each channel
+  HAL_TIM_Base_Start_IT(&htim2); //50 sample/s
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc, 2);
   HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_3);
@@ -137,8 +137,8 @@ int main(void)
   pulse_filter.num_taps = COEFF_SIZE;
   pulse_filter.coeff = fir_coeff;
 
-  envelop_filter.blockSize = 16;
-  envelop_filter.num_taps = 64;
+  envelop_filter.blockSize = 128;
+  envelop_filter.num_taps = 128;
   envelop_filter.coeff = Envelop;
 
   arm_fir_init_f32(&pulse_filter.S, pulse_filter.num_taps, pulse_filter.coeff, &pulse_filter.state[0], pulse_filter.blockSize);
@@ -242,7 +242,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 		//w_d1 = w;
 		if (recording == 1)
 		{
-			NIBP.pulse_prefilterred[_adc] = pulse_noDC;
+			NIBP.pulse_prefilterred[_adc] = pulse_noDC - 300;
 			NIBP.pressure[_adc++] = adc[0];
 		}
 	}
@@ -258,6 +258,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	{
 		HAL_TIM_Base_Start(&htim4); /*timer for button debounce*/
 		bt_flag = 1;
+		_adc = 0;
 		if (state == 0) state = 1;
 		else state = 0;
 	}

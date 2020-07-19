@@ -10,7 +10,7 @@
 
 int tmp;
 void ready_state();
-float32_t start(uint16_t *pressure, float32_t limp_bp[], FIR_filter_Struct *filter, FIR_filter_Struct *envelop_filter, NIBP_Struct *NIBP);
+float32_t start(uint16_t *pressure, float32_t limp_bp[], FIR_filter_Struct *filter, envelop_filter_Struct *envelop_filter, NIBP_Struct *NIBP);
 
 uint8_t ready, recording;
 uint16_t _pressure;

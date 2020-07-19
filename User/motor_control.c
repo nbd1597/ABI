@@ -7,10 +7,10 @@ void ready_state()
 
 	htim5.Instance->CCR2 = 0;
 	htim5.Instance->CCR3 = 0;
-	parameters_init();
+	//parameters_init();
 
 }
-float32_t start(uint16_t *pressure, float32_t limp_bp[], FIR_filter_Struct *filter, FIR_filter_Struct *envelop_filter, NIBP_Struct *NIBP)
+float32_t start(uint16_t *pressure, float32_t limp_bp[], FIR_filter_Struct *filter, envelop_filter_Struct *envelop_filter, NIBP_Struct *NIBP)
 {
 	//uint16_t pressureee;
 
@@ -56,23 +56,19 @@ float32_t start(uint16_t *pressure, float32_t limp_bp[], FIR_filter_Struct *filt
 	static uint32_t _limp;
 
 	find_peak(NIBP); //
-	find_MAP(NIBP->pulse_filterred, NIBP->pressure);//
-	find_envelop(envelop_filter);
+	find_MAP(NIBP->pulse_filterred, NIBP->pressure, NIBP);//
+	find_envelop(envelop_filter, NIBP);
 	limp_bp[_limp++] = find_SYS(NIBP);//
-    for (int i = 0; i <= 3500; i++)
+    for (int i = 0; i <= 3000; i++)
     {
-    	sprintf((char*)CDC_Buf, "%f\r", peak[i]);
+    	sprintf((char*)CDC_Buf, "%.3f\r", NIBP->pulse_filterred[i]);
     	CDC_Transmit_FS(CDC_Buf, sizeof(CDC_Buf));
     	HAL_Delay(1);
 
     }
 
 
-	while(1) /*hold until next measure*/
-	{
-		if (state == 0);
-		break;
-	}
+    state = 0;
 	return 0;
 
 }
