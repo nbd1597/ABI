@@ -43,13 +43,13 @@ static int trough_pos;
 
 	}
 }*/
-void find_peak (NIBP_Struct* NIBP)
+void find_peak (NIBP_Struct* NIBP, uint8_t index)
 {
     /*find stop point*/
     for (pos = 0; pos < MAX_LENGTH; pos++ )
     {
 
-        if (NIBP->pressure[pos] == 0)
+        if (NIBP->Limp[index].pressure[pos] == 0)
         {
             //break;
         	_stop = pos -1;
@@ -307,7 +307,7 @@ void find_envelop(envelop_filter_Struct *filter, NIBP_Struct *NIBP)
 	*/
 
 }
-float32_t find_SYS(NIBP_Struct *NIBP)
+float32_t find_SYS(NIBP_Struct *NIBP, uint8_t index)
 {
 	float32_t Ks;
 	float32_t Sys_pulse, Sys;
@@ -339,7 +339,7 @@ float32_t find_SYS(NIBP_Struct *NIBP)
 		}
 		*/
 	}
-	Sys = NIBP->pressure[Sys_pos] * calib_a - calib_b;
+	Sys = NIBP->Limp[index].pressure[Sys_pos] * calib_a - calib_b;
 	return Sys;
 
 }

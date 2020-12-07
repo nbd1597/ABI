@@ -22,7 +22,9 @@
 #include "main.h"
 #include "adc.h"
 #include "dma.h"
+#include "spi.h"
 #include "tim.h"
+#include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
 
@@ -34,6 +36,9 @@
 #include "usbd_cdc_if.h"
 #include "find_abi.h"
 #include "User_Structs.h"
+#include "ILI9341_GFX.h"
+#include "ILI9341_STM32_Driver.h"
+#include "Display.h"
 
 
 /* USER CODE END Includes */
@@ -61,15 +66,16 @@
 /* USER CODE BEGIN PV */
 uint16_t bt_flag;
 uint16_t state;
-uint16_t adc[2];
+uint16_t adc[8];
 uint16_t _adc = 0;
-
+char temp[8];
 uint16_t _limp = 0;
+
 /*
  * variable for dc removal
  */
 //static float32_t w, w_d1;
-static float32_t pulse_noDC;
+static float32_t pulse_noDC[4];
 
 /*
  * variable for ABI calculation
@@ -124,13 +130,21 @@ int main(void)
   MX_ADC1_Init();
   MX_TIM2_Init();
   MX_TIM4_Init();
-  MX_TIM5_Init();
   MX_USB_DEVICE_Init();
+  MX_SPI2_Init();
+  MX_TIM3_Init();
+  MX_UART4_Init();
   /* USER CODE BEGIN 2 */
+  ILI9341_Init();
+  LCD_Layout();
   HAL_TIM_Base_Start_IT(&htim2); //50 sample/s
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc, 2);
-  HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_2);
-  HAL_TIM_PWM_Start(&htim5, TIM_CHANNEL_3);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc, 8);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
+
+//  LCD_Layout();
 
 
   pulse_filter.blockSize = BLOCK_SIZE;
@@ -140,11 +154,11 @@ int main(void)
   envelop_filter.blockSize = 128;
   envelop_filter.num_taps = 128;
   envelop_filter.coeff = Envelop;
-
+//
   arm_fir_init_f32(&pulse_filter.S, pulse_filter.num_taps, pulse_filter.coeff, &pulse_filter.state[0], pulse_filter.blockSize);
   arm_fir_init_f32(&envelop_filter.S, envelop_filter.num_taps, envelop_filter.coeff, &envelop_filter.state[0], envelop_filter.blockSize);
   uint16_t measure_count = 0;
-
+  start(&adc[0], limp_bp, &pulse_filter, &envelop_filter, &NIBP);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -163,23 +177,23 @@ int main(void)
 			case 1:
 				start(&adc[0], limp_bp, &pulse_filter, &envelop_filter, &NIBP);
 
-				switch (measure_count)
-				{
-				case 0:
-					GPIOD->BSRR = GPIO_PIN_14;
-					measure_count++;
-					break;
-				case 1:
-					GPIOD->BSRR = GPIO_PIN_13;
-					measure_count++;
-					break;
-				case 2:
-					GPIOD->BSRR = GPIO_PIN_12;
-					measure_count = 0;
-					get_ABI(limp_bp);
-					break;
-				}
-				break;
+//				switch (measure_count)
+//				{
+//				case 0:
+//					GPIOD->BSRR = GPIO_PIN_14;
+//					measure_count++;
+//					break;
+//				case 1:
+//					GPIOD->BSRR = GPIO_PIN_13;
+//					measure_count++;
+//					break;
+//				case 2:
+//					GPIOD->BSRR = GPIO_PIN_12;
+//					measure_count = 0;
+//					get_ABI(limp_bp);
+//					break;
+//				}
+//				break;
 	  }
 
 
@@ -238,13 +252,29 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 	{
 
 		//w = adc[1] + 0.95*w_d1;
-		pulse_noDC = adc[1] - 1228; //- w;
-		//w_d1 = w;
-		if (recording == 1)
+//		LCD_Update_adc(adc);
+		for (uint8_t i = 0; i <4; i++)
 		{
-			NIBP.pulse_prefilterred[_adc] = pulse_noDC - 300;
-			NIBP.pressure[_adc++] = adc[0];
+			pulse_noDC[i] = adc[i] - 1228; //- w;
+			if (recording == 1)
+			{
+				NIBP.Limp[i].pulse_prefilterred[_adc] = pulse_noDC[i] - 300;
+				NIBP.Limp[i].pressure[_adc++] = adc[i+4];
+			}
 		}
+		for(int i = 0; i < 4; i++)
+		{
+			sprintf(&temp[0], "%6d", adc[i]);
+		//	ILI9341_Draw_Text("Test", 0, 240, RED, 1, BLACK);
+			ILI9341_Draw_Text(&temp[0], 150, 40 + i*40, RED, 1, BLACK);
+		}
+		for(int i = 0; i < 4; i++)
+		{
+			sprintf(&temp[0], "%6d", adc[i + 4]);
+		//	ILI9341_Draw_Text("Test", 0, 240, RED, 1, BLACK);
+			ILI9341_Draw_Text(&temp[0], 150, 20 + i*40, RED, 1, BLACK);
+		}
+
 	}
 
 }

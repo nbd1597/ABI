@@ -64,6 +64,46 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define LCD_CS_Pin GPIO_PIN_2
+#define LCD_CS_GPIO_Port GPIOE
+#define LCD_RST_Pin GPIO_PIN_3
+#define LCD_RST_GPIO_Port GPIOE
+#define LCD_DC_Pin GPIO_PIN_4
+#define LCD_DC_GPIO_Port GPIOE
+#define PRESSURE_4_Pin GPIO_PIN_0
+#define PRESSURE_4_GPIO_Port GPIOC
+#define PULSE_1_Pin GPIO_PIN_3
+#define PULSE_1_GPIO_Port GPIOA
+#define PULSE_2_Pin GPIO_PIN_4
+#define PULSE_2_GPIO_Port GPIOA
+#define PULSE_3_Pin GPIO_PIN_5
+#define PULSE_3_GPIO_Port GPIOA
+#define PULSE_4_Pin GPIO_PIN_6
+#define PULSE_4_GPIO_Port GPIOA
+#define PRESSURE_1_Pin GPIO_PIN_7
+#define PRESSURE_1_GPIO_Port GPIOA
+#define PRESSURE_2_Pin GPIO_PIN_0
+#define PRESSURE_2_GPIO_Port GPIOB
+#define PRESSURE_3_Pin GPIO_PIN_1
+#define PRESSURE_3_GPIO_Port GPIOB
+#define LCD_SCK_Pin GPIO_PIN_10
+#define LCD_SCK_GPIO_Port GPIOB
+#define PUMP_4_Pin GPIO_PIN_8
+#define PUMP_4_GPIO_Port GPIOD
+#define PUMP_3_Pin GPIO_PIN_9
+#define PUMP_3_GPIO_Port GPIOD
+#define PUMP_2_Pin GPIO_PIN_10
+#define PUMP_2_GPIO_Port GPIOD
+#define PUMP_1_Pin GPIO_PIN_11
+#define PUMP_1_GPIO_Port GPIOD
+#define VALVE_1_Pin GPIO_PIN_6
+#define VALVE_1_GPIO_Port GPIOC
+#define VLAVE_2_Pin GPIO_PIN_7
+#define VLAVE_2_GPIO_Port GPIOC
+#define VLAVE_3_Pin GPIO_PIN_8
+#define VLAVE_3_GPIO_Port GPIOC
+#define VALVE_4_Pin GPIO_PIN_9
+#define VALVE_4_GPIO_Port GPIOC
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */

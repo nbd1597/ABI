@@ -9,16 +9,30 @@
 #ifndef USER_STRUCTS_H_
 #define USER_STRUCTS_H_
 
-#define MAX_LENGTH 3000
+#define MAX_LENGTH 2500
 #define BLOCK_SIZE 16
 #define COEFF_SIZE 64
 
 typedef struct
 {
+	uint16_t pressure[MAX_LENGTH];					//seperate array for each channel
+	int16_t pulse_prefilterred [MAX_LENGTH];
+}ADC_Input_t;
 
-	uint16_t pressure[MAX_LENGTH];
-	float32_t pulse_prefilterred [MAX_LENGTH];
-	float32_t pulse_filterred[MAX_LENGTH];
+typedef struct
+{
+
+//	uint16_t pressure[MAX_LENGTH];					//seperate array for each channel
+//	int16_t pulse_prefilterred [MAX_LENGTH];
+//	uint16_t pressure2[MAX_LENGTH];
+//	int16_t pulse_prefilterred2 [MAX_LENGTH];
+//	uint16_t pressure3[MAX_LENGTH];
+//	int16_t pulse_prefilterred3 [MAX_LENGTH];
+//	uint16_t pressure4[MAX_LENGTH];
+//	int16_t pulse_prefilterred4 [MAX_LENGTH];
+	ADC_Input_t Limp[4];
+
+	float32_t pulse_filterred[MAX_LENGTH]; //shared bw each channel
 	float32_t peak[MAX_LENGTH];
 	float32_t S_peak[MAX_LENGTH];
 	float32_t peak_step[MAX_LENGTH];
