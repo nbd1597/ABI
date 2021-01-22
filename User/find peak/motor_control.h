@@ -14,7 +14,7 @@ float32_t start(uint16_t *pressure, float32_t limp_bp[], FIR_filter_Struct *filt
 
 uint8_t ready, recording;
 uint16_t _pressure;
-uint16_t state;
+//uint16_t state;
 //uint16_t _limp = 0;
 
 #endif

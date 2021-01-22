@@ -1,6 +1,6 @@
 #include "motor_control.h"
 
-#define LIMP_NUMBER 1
+#define LIMP_NUMBER 2
 
 void ready_state()
 {
@@ -134,7 +134,7 @@ float32_t start(uint16_t *adc, float32_t limp_bp[], FIR_filter_Struct *filter, e
 //    }
 
 
-    state = 0;
+//    state = 0;
 	return 0;
 
 }
