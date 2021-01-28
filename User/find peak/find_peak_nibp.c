@@ -168,8 +168,8 @@ float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP,
 {
     if(index == 0)
     {
-    	calib_a = 0.038;
-    	calib_b = 6.56;
+    	calib_a = 0.041;
+    	calib_b = -2.8;
     }
     else if (index == 1)
     {
@@ -331,7 +331,21 @@ void find_envelop(envelop_filter_Struct *filter, NIBP_Struct *NIBP)
 float32_t find_SYS(NIBP_Struct *NIBP, uint8_t index)
 {
 	float32_t Ks;
-
+    if(index == 0)
+    {
+    	calib_a = 0.041;
+    	calib_b = -2.8;
+    }
+    else if (index == 1)
+    {
+    	calib_a = 0.043;
+    	calib_b = -0.7;
+    }
+    else if (index == 2)
+    {
+    	calib_a = 0.044;
+    	calib_b = -7.1;
+    }
 
 	if (MAP > 200) Ks = 0.5;
 	else if(MAP < 200 && MAP > 150) Ks = 0.29;
