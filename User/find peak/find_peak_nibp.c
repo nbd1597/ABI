@@ -7,8 +7,8 @@
  * mmHg = calib_a*adc - calib_b		0.073 21.271
  * R2 = 0.9961
  */
-#define calib_a	 	(float32_t)0.070
-#define calib_b		(float32_t)21.271
+//#define calib_a	 	(float32_t)0.070
+//#define calib_b		(float32_t)21.271
 
 #define _start 200
 static int _stop;
@@ -17,6 +17,11 @@ int k = 5; //window
 int h = 1.5; // constant to choose peak
 int MAP_pos;
 int MAP;
+int test;
+float32_t calib_a, calib_b;
+float32_t temp_sys;
+uint16_t Sys_pos;
+float32_t Sys_pulse, Sys;
 static float left_hill = 0;
 //uint16_t S_peak[MAX_LENGTH]={0};
 //uint16_t peak[MAX_LENGTH]={0};
@@ -159,9 +164,24 @@ void find_peak (NIBP_Struct* NIBP, uint8_t index)
 
 }
 
-float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP)
+float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP, uint8_t index)
 {
-    MAP_pos = 0;
+    if(index == 0)
+    {
+    	calib_a = 0.038;
+    	calib_b = 6.56;
+    }
+    else if (index == 1)
+    {
+    	calib_a = 0.043;
+    	calib_b = -0.7;
+    }
+    else if (index == 2)
+    {
+    	calib_a = 0.044;
+    	calib_b = -7.1;
+    }
+	MAP_pos = 0;
     float32_t* temp1 = NULL;
     float32_t* temp2 = NULL;
     for (pos= _start+k; pos <= _stop-k; pos++)
@@ -311,8 +331,8 @@ void find_envelop(envelop_filter_Struct *filter, NIBP_Struct *NIBP)
 float32_t find_SYS(NIBP_Struct *NIBP, uint8_t index)
 {
 	float32_t Ks;
-	float32_t Sys_pulse, Sys;
-	uint16_t Sys_pos;
+
+
 	if (MAP > 200) Ks = 0.5;
 	else if(MAP < 200 && MAP > 150) Ks = 0.29;
 	else if(MAP < 150 && MAP > 135) Ks = 0.45;
@@ -323,13 +343,18 @@ float32_t find_SYS(NIBP_Struct *NIBP, uint8_t index)
 
 	//Sys_pulse = ((Ks * NIBP->Limp[index].pulse_prefilterred[MAP_pos]) + calib_b) / calib_a;
 	Sys_pulse = Ks * NIBP->Limp[index].pulse_prefilterred[MAP_pos];
-	float32_t temp = Sys_pulse;
-	for (int i = _start; i < MAP_pos; i++)
+	temp_sys = MAXFLOAT;
+	for (int i = 0; i < MAP_pos; i++)
 	{
-		if(abs(Sys_pulse - NIBP->peak[i]) < temp && NIBP->peak != 0)
+		if(NIBP->peak[i] > 0)
+		test++;
 		{
-			temp = Sys_pulse - NIBP->Limp[index].pulse_prefilterred[i];
-			Sys_pos = i;
+			if(abs(Sys_pulse - NIBP->peak[i]) < temp_sys)
+			{
+				temp_sys = abs(Sys_pulse - NIBP->peak[i]);
+				Sys_pos = i;
+			}
+
 		}
 		/*
 		else if (Sys_pulse - NIBP->peak_envelop[i] < 0)

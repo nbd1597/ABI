@@ -24,7 +24,7 @@ void parameters_init();
 void find_peak (NIBP_Struct* NIBP, uint8_t index);
 //void fir_lp(uint16_t signal[]);
 //void find_envelop(uint16_t signal[]);
-float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP);
+float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP, uint8_t index);
 //void remove_DC(uint16_t signal[], float a);
 float32_t find_SYS(NIBP_Struct *NIBP, uint8_t index);
 void find_envelop(envelop_filter_Struct *envelop, NIBP_Struct *NIBP);

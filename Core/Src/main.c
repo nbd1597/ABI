@@ -54,7 +54,7 @@
 #define MAX_LENGTH 2500
 #define BLOCK_SIZE 16
 #define COEFF_SIZE 64
-#define LIMP_NUMBER 2
+#define LIMP_NUMBER 3
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -203,23 +203,26 @@ int main(void)
 
 		  	  	}
 		  	  find_peak(pNIBP, _limp); //
-		  	  map_pos = find_MAP((float32_t*)(&NIBP.pulse_filterred), &NIBP.Limp[_limp].pressure[0], pNIBP);//
+		  	  map_pos = find_MAP((float32_t*)(&NIBP.pulse_filterred), &NIBP.Limp[_limp].pressure[0], pNIBP, _limp);//
 		  	  find_envelop(&envelop_filter, pNIBP);
 		  	  limp_bp[_limp] = find_SYS(pNIBP, _limp);
+//		  	  MAP_pos = 0;
 		  	  for(int i = 0; i < MAX_LENGTH; i++)
 		  	  {
 		  		  NIBP.pulse_filterred[i] = 0;
+		  		  NIBP.S_peak[i] = 0;
+		  		  NIBP.peak[i] = 0;
+		  		  NIBP.peak_envelop[i] = 0;
+		  		  NIBP.peak_step[i] = 0;
 		  	  }
 
-				sprintf(&result[0], "%6d", (int)map_pos);
-				ILI9341_Draw_Text(&result[0], 350, 220 + _limp*20, RED, 1, BLACK);
+//				sprintf(&result[0], "%6d", (int)map_pos);
+//				ILI9341_Draw_Text(&result[0], 350, 220 + _limp*20, RED, 1, BLACK);
+				sprintf(&result[0], "%6d", (int)limp_bp[_limp]);
+				ILI9341_Draw_Text("Test", 0, 220 + _limp*20, RED, 1, BLACK);
+				ILI9341_Draw_Text(&result[0], 20, 220 + _limp*20, RED, 1, BLACK);
+				HAL_Delay(200);
 		  }
-		for(int i = 0; i < 2; i++)
-		{
-			sprintf(&result[0], "%6d", (int)limp_bp[i]);
-			ILI9341_Draw_Text("Test", 0, 220 + i*20, RED, 1, BLACK);
-			ILI9341_Draw_Text(&result[0], 20, 220 + i*20, RED, 1, BLACK);
-		}
 		  state = READY;
 	  }
 
@@ -291,6 +294,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 				NIBP.Limp[0].pressure[_adc] = adc[4];
 				NIBP.Limp[1].pulse_prefilterred[_adc] = adc[1];
 				NIBP.Limp[1].pressure[_adc] = adc[5];
+				NIBP.Limp[2].pulse_prefilterred[_adc] = adc[2];
+				NIBP.Limp[2].pressure[_adc] = adc[6];
 				_adc++;
 			}
 //		}
@@ -335,7 +340,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 				  {
 					case READY:
 
-						ILI9341_Draw_Text("   READY  ", 50, 200, BLUE, 2, BLACK);
+						ILI9341_Draw_Text("   READY  ", 30, 200, BLUE, 2, BLACK);
 						recording = 0;
 					//	for(uint8_t i; i <4; i++)
 					//	{
@@ -352,7 +357,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 						break;
 					case PUMPING:
 						recording = 0;
-						ILI9341_Draw_Text("  PUMPING  ", 50, 200, BLUE, 2, BLACK);
+						ILI9341_Draw_Text("  PUMPING  ", 30, 200, BLUE, 2, BLACK);
 					//	for(uint8_t i; i <4; i++)
 					//	{
 					//		GPIOD->BSRR = GPIO_PIN_8 << i;
@@ -382,10 +387,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 							}
 			//				if(adc[4] > 2900)	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, 0);
 						}
-						if((GPIOD->ODR & (GPIO_PIN_10 | GPIO_PIN_11)) == 0)
+						if((GPIOD->ODR & (GPIO_PIN_10 | GPIO_PIN_11 )) == 0)
 						{
 							state = DEFLATING;
-							ILI9341_Draw_Text("  DEFLATING  ", 50, 200, BLUE, 2, BLACK);
+							ILI9341_Draw_Text("  DEFLATING  ", 30, 200, BLUE, 2, BLACK);
 						}
 						break;
 					case DEFLATING:
@@ -401,11 +406,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 						htim3.Instance->CCR4 = 85;
 						if(adc[4] < 700 && adc[5] < 700)
 						{
-							htim3.Instance->CCR1 = 100;
-							htim3.Instance->CCR2 = 100;
-							htim3.Instance->CCR3 = 100;
-							htim3.Instance->CCR4 = 100;
-							ILI9341_Draw_Text("CALCULATING", 50, 200, BLUE, 2, BLACK);
+							htim3.Instance->CCR1 = 0;
+							htim3.Instance->CCR2 = 0;
+							htim3.Instance->CCR3 = 0;
+							htim3.Instance->CCR4 = 0;
+							ILI9341_Draw_Text("CALCULATING", 30, 200, BLUE, 2, BLACK);
 							state = CALCULATING;
 
 						}
