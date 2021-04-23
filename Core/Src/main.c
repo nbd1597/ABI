@@ -183,6 +183,7 @@ int main(void)
 //  uint16_t aaa;
 //  uint16_t* www;
 //  www = &adc[4];
+  HAL_UART_Transmit(&huart4, "hello", 6, 1);
 
   /* USER CODE END 2 */
 
@@ -296,6 +297,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 				NIBP.Limp[1].pressure[_adc] = adc[5];
 				NIBP.Limp[2].pulse_prefilterred[_adc] = adc[2];
 				NIBP.Limp[2].pressure[_adc] = adc[6];
+				NIBP.Limp[3].pulse_prefilterred[_adc] = adc[3];
+				NIBP.Limp[3].pressure[_adc] = adc[7];
 				_adc++;
 			}
 //		}
