@@ -11,12 +11,12 @@
 
 #define MAX_LENGTH 2500
 #define BLOCK_SIZE 16
-#define COEFF_SIZE 64
+#define COEFF_SIZE 32
 
 typedef struct
 {
 	uint16_t pressure[MAX_LENGTH];					//seperate array for each channel
-	int16_t pulse_prefilterred [MAX_LENGTH];
+	float32_t pulse_prefilterred [MAX_LENGTH];
 }ADC_Input_t;
 
 typedef struct
@@ -43,11 +43,13 @@ typedef struct
 typedef struct
 {
 	//float32_t pulse[MAX_LENGTH];
-	float32_t state[COEFF_SIZE + BLOCK_SIZE -1];
+//	float32_t state[COEFF_SIZE + BLOCK_SIZE -1];
+	float32_t *state;
 	float32_t *coeff;
 	uint16_t blockSize;
 	uint16_t num_taps;
 	arm_fir_instance_f32 S;
+	uint16_t num_block;
 } FIR_filter_Struct;
 
 typedef struct

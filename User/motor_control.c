@@ -110,7 +110,7 @@ float32_t start(uint16_t *adc, float32_t limp_bp[], FIR_filter_Struct *filter, e
 			arm_fir_f32(&filter->S, (float32_t*)NIBP->Limp[_limp].pulse_prefilterred + (i*BLOCK_SIZE) , NIBP->pulse_filterred + (i*BLOCK_SIZE), filter->blockSize);
 			find_peak(NIBP, _limp); //
 			find_MAP((float32_t*)NIBP->Limp[_limp].pulse_prefilterred, NIBP->Limp[_limp].pressure, NIBP, _limp);//
-			find_envelop(envelop_filter, NIBP);
+			find_envelop(NIBP);
 			limp_bp[_limp] = find_SYS(NIBP, _limp);
 		}
 	}

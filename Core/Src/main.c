@@ -39,6 +39,8 @@
 #include "ILI9341_GFX.h"
 #include "ILI9341_STM32_Driver.h"
 #include "Display.h"
+#include <string.h>
+#include <stdlib.h>
 
 
 /* USER CODE END Includes */
@@ -53,8 +55,8 @@
 /* USER CODE BEGIN PD */
 #define MAX_LENGTH 2500
 #define BLOCK_SIZE 16
-#define COEFF_SIZE 64
-#define LIMP_NUMBER 3
+#define COEFF_SIZE 32
+#define LIMP_NUMBER 4
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -66,15 +68,21 @@
 
 /* USER CODE BEGIN PV */
 uint16_t bt_flag;
+uint16_t bt_flag2;
 
 volatile uint16_t adc[8];
 uint16_t (*adc_ptr)[8];
 uint16_t _adc = 0;
-char temp[8];
-char result[8];
+char temp[12];
+char result[12];
+char toESP[21];
 uint16_t _limp = 0;
-uint16_t map_pos;
-
+int map_pos;
+float32_t adc_filterred;
+float32_t fir_state[COEFF_SIZE + BLOCK_SIZE -1];
+float32_t *pPulsepre;
+float32_t *pPulsefil;
+//float32_t *pS;
 /*
  * variable for dc removal
  */
@@ -87,7 +95,8 @@ static float32_t pulse_noDC[4];
 NIBP_Struct NIBP;
 FIR_filter_Struct pulse_filter;
 envelop_filter_Struct envelop_filter;
-float32_t limp_bp[3];
+float32_t limp_bp[4];
+float32_t abi;
 /*
  * State machine
  */
@@ -96,7 +105,9 @@ typedef enum
 	READY,
 	PUMPING,
 	DEFLATING,
-	CALCULATING
+	CALCULATING,
+	DISPLAY_DATA,
+	HOLD
 } STATE;
 STATE state;
 
@@ -129,7 +140,10 @@ int main(void)
   HAL_Init();
 
   /* USER CODE BEGIN Init */
-
+  /* FPU settings ------------------------------------------------------------*/
+    #if (__FPU_PRESENT == 1) && (__FPU_USED == 1)
+      SCB->CPACR |= ((3UL << 10*2)|(3UL << 11*2));  /* set CP10 and CP11 Full Access */
+    #endif
   /* USER CODE END Init */
 
   /* Configure the system clock */
@@ -153,7 +167,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   ILI9341_Init();
   LCD_Layout();
-  HAL_TIM_Base_Start_IT(&htim2); //50 sample/s
+//  HAL_TIM_Base_Start_IT(&htim2); //50 sample/s
   HAL_TIM_Base_Start_IT(&htim5); // 0.1s
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc, 8);
 
@@ -168,22 +182,27 @@ int main(void)
 
   pulse_filter.blockSize = BLOCK_SIZE;
   pulse_filter.num_taps = COEFF_SIZE;
-  pulse_filter.coeff = fir_coeff;
+  pulse_filter.coeff = &fir_coeff[0];
+  pulse_filter.state = &fir_state[0];
+  pulse_filter.num_block = MAX_LENGTH/BLOCK_SIZE;
 
   envelop_filter.blockSize = 128;
   envelop_filter.num_taps = 128;
-  envelop_filter.coeff = Envelop;
+  envelop_filter.coeff = &Envelop[0];
 //
-  arm_fir_init_f32(&pulse_filter.S, pulse_filter.num_taps, &pulse_filter.coeff[0], &pulse_filter.state[0], pulse_filter.blockSize);
-  arm_fir_init_f32(&envelop_filter.S, envelop_filter.num_taps, &envelop_filter.coeff[0], &envelop_filter.state[0], envelop_filter.blockSize);
+  arm_fir_init_f32(&pulse_filter.S, pulse_filter.num_taps, pulse_filter.coeff, &pulse_filter.state[0], pulse_filter.blockSize);
+  arm_fir_init_f32(&envelop_filter.S, envelop_filter.num_taps, envelop_filter.coeff, &envelop_filter.state[0], envelop_filter.blockSize);
 //  uint16_t measure_count = 0;
 //  start(adc, limp_bp, &pulse_filter, &envelop_filter, &NIBP);
   state = READY;
   NIBP_Struct* pNIBP = &NIBP;
+  pPulsepre = (float32_t*)&NIBP.Limp[_limp].pulse_prefilterred[0];
+  pPulsefil = (float32_t*)&NIBP.pulse_filterred[0];
 //  uint16_t aaa;
 //  uint16_t* www;
 //  www = &adc[4];
-  HAL_UART_Transmit(&huart4, "hello", 6, 1);
+//  HAL_UART_Transmit(&huart4, "start\n\r", 6, 1);
+
 
   /* USER CODE END 2 */
 
@@ -194,38 +213,198 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  if ( state == CALCULATING)
+/*********************************************************************************************
+		 * STATE MACHINE
+********************************************************************************************/
+
+	  switch (state)
 	  {
+		case READY:
+			HAL_TIM_Base_Start_IT(&htim2); //50 sample/s
+			ILI9341_Draw_Text("   READY  ", 30, 200, BLUE, 2, BLACK);
+			recording = 0;
+		//	for(uint8_t i; i <4; i++)
+		//	{
+		//		GPIOD->BSRR = GPIO_PIN_8 << i;
+		//	}
+			GPIOD->BSRR = GPIO_PIN_8 << 16U;
+			GPIOD->BSRR = GPIO_PIN_9 << 16U;
+			GPIOD->BSRR = GPIO_PIN_10 << 16U;
+			GPIOD->BSRR = GPIO_PIN_11 << 16U;
+			htim3.Instance->CCR1 = 0;
+			htim3.Instance->CCR2 = 0;
+			htim3.Instance->CCR3 = 0;
+			htim3.Instance->CCR4 = 0;
+			break;
+		case PUMPING:
+			recording = 0;
+			ILI9341_Draw_Text("  PUMPING  ", 30, 200, BLUE, 2, BLACK);
+		//	for(uint8_t i; i <4; i++)
+		//	{
+		//		GPIOD->BSRR = GPIO_PIN_8 << i;
+		//	}
+			GPIOD->BSRR = GPIO_PIN_8;
+//						GPIOD->BSRR = GPIO_PIN_9;
+//						GPIOD->BSRR = GPIO_PIN_10;
+//						GPIOD->BSRR = GPIO_PIN_11;
+			htim3.Instance->CCR1 = 100;
+			htim3.Instance->CCR2 = 100;
+			htim3.Instance->CCR3 = 100;
+			htim3.Instance->CCR4 = 100;
+			for(uint8_t i = 0; i <LIMP_NUMBER; i++)
+			{
+				if (adc[i + 4] >3200 )
+				{
+//					GPIOD->BSRR = (uint32_t)GPIO_PIN_11 << 16;
+//						GPIOD->BSRR = GPIO_PIN_15;
+//						GPIOD->BSRR = GPIO_PIN_14 << 16U;
+					HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11 >> i, 0);
+				}
+				else if(adc[i + 4] < 3000)
+				{
+//						GPIOD->BSRR = GPIO_PIN_11;
+//						GPIOD->BSRR = GPIO_PIN_14;
+					HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11 >> i, 1);
+				}
+//				if(adc[4] > 2900)	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, 0);
+			}
+			if((GPIOD->ODR & (GPIO_PIN_10 | GPIO_PIN_11 | GPIO_PIN_9 | GPIO_PIN_8 )) == 0)
+			{
+				state = DEFLATING;
+				ILI9341_Draw_Text("  DEFLATING  ", 30, 200, BLUE, 2, BLACK);
+			}
+			break;
+		case DEFLATING:
+
+			recording = 1;
+			GPIOD->BSRR = GPIO_PIN_8 << 16U;
+			GPIOD->BSRR = GPIO_PIN_9 << 16U;
+			GPIOD->BSRR = GPIO_PIN_10 << 16U;
+			GPIOD->BSRR = GPIO_PIN_11 << 16U;
+			htim3.Instance->CCR1 = 90;
+			htim3.Instance->CCR2 = 90;
+			htim3.Instance->CCR3 = 90;
+			htim3.Instance->CCR4 = 90;
+//
+			if(adc[4] < 1700)
+			{
+				htim3.Instance->CCR1 = 0;
+				htim3.Instance->CCR2 = 0;
+				htim3.Instance->CCR3 = 0;
+				htim3.Instance->CCR4 = 0;
+				ILI9341_Draw_Text("CALCULATING", 30, 200, BLUE, 2, BLACK);
+				state = CALCULATING;
+
+			}
+			break;
+		case CALCULATING:
+
+
+			/*
+			 * wait for main loop done task
+			 */
+			HAL_TIM_Base_Stop_IT(&htim2); //50 sample/s
+			htim3.Instance->CCR1 = 0;
+			htim3.Instance->CCR2 = 0;
+			htim3.Instance->CCR3 = 0;
+			htim3.Instance->CCR4 = 0;
+
 		  for(uint8_t _limp = 0; _limp <LIMP_NUMBER; _limp++)
 		  {
-		  	  	for (int i = 0; i < MAX_LENGTH/BLOCK_SIZE; i++)
-		  	  	{
-		  	  		arm_fir_f32(&pulse_filter.S, (float32_t*)(&NIBP.Limp[_limp].pulse_prefilterred[0]) + (i*BLOCK_SIZE) , &NIBP.pulse_filterred[0] + (i*BLOCK_SIZE), pulse_filter.blockSize);
+				for (int i = 0; i < pulse_filter.num_block; i++)
+				{
+					arm_fir_f32(&pulse_filter.S, (float32_t*)(&NIBP.Limp[_limp].pulse_prefilterred[0]) + (i*BLOCK_SIZE) , &NIBP.pulse_filterred[0] + (i*BLOCK_SIZE), pulse_filter.blockSize);
+					HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_15);
+//		  	  		GPIOD->BSRR = GPIO_PIN_15;
+				}
+//			  for (int i = 0; i < 2500; i++) {
+////				  dtostrf
+//		  		sprintf(temp, "%f\n", NIBP.pulse_filterred[i]);
+//		  		HAL_UART_Transmit(&huart4, (uint8_t*)&temp[0], sizeof(temp), 10);
+////		  		HAL_UART_Transmit(huart, pData, Size, Timeout)
+//		  		HAL_Delay(1);
+//				  adc_filterred = NIBP.pulse_filterred[i];
+//
+//			  }
 
-		  	  	}
-		  	  find_peak(pNIBP, _limp); //
-		  	  map_pos = find_MAP((float32_t*)(&NIBP.pulse_filterred), &NIBP.Limp[_limp].pressure[0], pNIBP, _limp);//
-		  	  find_envelop(&envelop_filter, pNIBP);
-		  	  limp_bp[_limp] = find_SYS(pNIBP, _limp);
+			  find_peak(pNIBP, _limp); //
+			  map_pos = find_MAP((float32_t*)(&NIBP.pulse_filterred), &NIBP.Limp[_limp].pressure[0], pNIBP, _limp);//
+			  find_envelop(pNIBP);
+
+//			  HAL_UART_Transmit(&huart4, "peak\n", 6, 10);
+//			  for (int i = 0; i < 2500; i++) {
+//	//				  dtostrf
+//				sprintf(temp, "%f\n", NIBP.peak[i]);
+//				HAL_UART_Transmit(&huart4, (uint8_t*)&temp[0], sizeof(temp), 10);
+//	//		  		HAL_UART_Transmit(huart, pData, Size, Timeout)
+//				HAL_Delay(1);
+//				  adc_filterred = NIBP.pulse_filterred[i];
+//
+//			  }
+			  limp_bp[_limp] = find_SYS(pNIBP, _limp);
+			  sprintf(&result[0], "%6d", (int)limp_bp[_limp]);
 //		  	  MAP_pos = 0;
-		  	  for(int i = 0; i < MAX_LENGTH; i++)
-		  	  {
-		  		  NIBP.pulse_filterred[i] = 0;
-		  		  NIBP.S_peak[i] = 0;
-		  		  NIBP.peak[i] = 0;
-		  		  NIBP.peak_envelop[i] = 0;
-		  		  NIBP.peak_step[i] = 0;
-		  	  }
+			  for(int i = 0; i < MAX_LENGTH; i++)
+			  {
+				  NIBP.pulse_filterred[i] = 0;
+				  NIBP.S_peak[i] = 0;
+				  NIBP.peak[i] = 0;
+				  NIBP.peak_envelop[i] = 0;
+				  NIBP.peak_step[i] = 0;
+			  }
 
 //				sprintf(&result[0], "%6d", (int)map_pos);
 //				ILI9341_Draw_Text(&result[0], 350, 220 + _limp*20, RED, 1, BLACK);
-				sprintf(&result[0], "%6d", (int)limp_bp[_limp]);
-				ILI9341_Draw_Text("Test", 0, 220 + _limp*20, RED, 1, BLACK);
-				ILI9341_Draw_Text(&result[0], 20, 220 + _limp*20, RED, 1, BLACK);
-				HAL_Delay(200);
+
 		  }
-		  state = READY;
+		  state = DISPLAY_DATA;
+		  abi = find_abi(&limp_bp[0]);
+		  sprintf(&toESP[0], "%.0f %.0f %.0f %.0f %.2f", (double)limp_bp[0], (double)limp_bp[1], (double)limp_bp[2], (double)limp_bp[3], (double)abi);
+		  HAL_UART_Transmit(&huart4, &toESP[0], 20, 10);
+		  HAL_TIM_Base_Start_IT(&htim2); //50 sample/s
+//		  ILI9341_Fill_Screen(BLACK);
+			//state = READY;
+			break;
+		case DISPLAY_DATA:
+			for(uint8_t _limp = 0; _limp <LIMP_NUMBER; _limp++)
+			{
+				sprintf(&result[0], "%6d", (int)limp_bp[_limp]);
+
+				HAL_Delay(200);
+
+			}
+			sprintf(&result[0], "%6d", (int)limp_bp[0]);
+			ILI9341_Draw_Text("Limp0", 0, 220, YELLOW, 1, BLACK);
+			ILI9341_Draw_Text(&result[0], 20, 220, YELLOW, 1, BLACK);
+
+			sprintf(&result[0], "%6d", (int)limp_bp[1]);
+			ILI9341_Draw_Text("Limp1", 80, 220, ORANGE, 1, BLACK);
+			ILI9341_Draw_Text(&result[0], 100, 220, ORANGE, 1, BLACK);
+
+			sprintf(&result[0], "%6d", (int)limp_bp[2]);
+			ILI9341_Draw_Text("Limp2", 0, 240, PINK, 1, BLACK);
+			ILI9341_Draw_Text(&result[0], 20, 240, PINK, 1, BLACK);
+
+			sprintf(&result[0], "%6d", (int)limp_bp[3]);
+			ILI9341_Draw_Text("Limp3", 80, 240, GREEN, 1, BLACK);
+			ILI9341_Draw_Text(&result[0], 100, 240, GREEN, 1, BLACK);
+			HAL_Delay(200);
+			break;
+		case HOLD:
+			GPIOD->BSRR = GPIO_PIN_8 << 16U;
+			GPIOD->BSRR = GPIO_PIN_9 << 16U;
+			GPIOD->BSRR = GPIO_PIN_10 << 16U;
+			GPIOD->BSRR = GPIO_PIN_11 << 16U;
+			htim3.Instance->CCR1 = 100;
+			htim3.Instance->CCR2 = 100;
+			htim3.Instance->CCR3 = 100;
+			htim3.Instance->CCR4 = 100;
+			break;
 	  }
+/*********************************************************************************************
+	  		 END STATE MACHINE
+********************************************************************************************/
+
 
   }
   /* USER CODE END 3 */
@@ -291,15 +470,19 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 			{
 //				NIBP.Limp[i].pulse_prefilterred[_adc] = adc[i];
 //				NIBP.Limp[i].pressure[_adc] = adc[i+4];
-				NIBP.Limp[0].pulse_prefilterred[_adc] = adc[0];
+				NIBP.Limp[0].pulse_prefilterred[_adc] = (float32_t)(adc[0] - 1600);
 				NIBP.Limp[0].pressure[_adc] = adc[4];
-				NIBP.Limp[1].pulse_prefilterred[_adc] = adc[1];
+				NIBP.Limp[1].pulse_prefilterred[_adc] = (float32_t)(adc[1] - 1600);
 				NIBP.Limp[1].pressure[_adc] = adc[5];
-				NIBP.Limp[2].pulse_prefilterred[_adc] = adc[2];
+				NIBP.Limp[2].pulse_prefilterred[_adc] = (float32_t)(adc[2] - 1600);
 				NIBP.Limp[2].pressure[_adc] = adc[6];
-				NIBP.Limp[3].pulse_prefilterred[_adc] = adc[3];
+				NIBP.Limp[3].pulse_prefilterred[_adc] = (float32_t)(adc[3] - 1600);
 				NIBP.Limp[3].pressure[_adc] = adc[7];
 				_adc++;
+			}
+			if(_adc == MAX_LENGTH - 2)
+			{
+				state = CALCULATING;
 			}
 //		}
 
@@ -319,7 +502,17 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		bt_flag = 1;
 		_adc = 0;
 		if (state == READY) state = PUMPING;
+		if (state == DISPLAY_DATA) state = READY;
 	}
+//	if (GPIO_Pin == GPIO_PIN_1)
+//	{
+//		HAL_TIM_Base_Start(&htim4); /*timer for button debounce*/
+//		bt_flag = 1;
+//		_adc = 0;
+//		if (state == READY) state = PUMPING;
+//		else if (state == PUMPING) state = HOLD;
+//		else if ( state == HOLD) state = PUMPING;
+//	}
 }
 /*
  * Button debounce
@@ -336,116 +529,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 	}
 	if (htim->Instance == htim5.Instance)
 	{
-		/*********************************************************************************************
-				 * STATE MACHINE
-		********************************************************************************************/
-				  switch (state)
-				  {
-					case READY:
 
-						ILI9341_Draw_Text("   READY  ", 30, 200, BLUE, 2, BLACK);
-						recording = 0;
-					//	for(uint8_t i; i <4; i++)
-					//	{
-					//		GPIOD->BSRR = GPIO_PIN_8 << i;
-					//	}
-						GPIOD->BSRR = GPIO_PIN_8 << 16U;
-						GPIOD->BSRR = GPIO_PIN_9 << 16U;
-						GPIOD->BSRR = GPIO_PIN_10 << 16U;
-						GPIOD->BSRR = GPIO_PIN_11 << 16U;
-						htim3.Instance->CCR1 = 0;
-						htim3.Instance->CCR2 = 0;
-						htim3.Instance->CCR3 = 0;
-						htim3.Instance->CCR4 = 0;
-						break;
-					case PUMPING:
-						recording = 0;
-						ILI9341_Draw_Text("  PUMPING  ", 30, 200, BLUE, 2, BLACK);
-					//	for(uint8_t i; i <4; i++)
-					//	{
-					//		GPIOD->BSRR = GPIO_PIN_8 << i;
-					//	}
-						GPIOD->BSRR = GPIO_PIN_8;
-						GPIOD->BSRR = GPIO_PIN_9;
-						GPIOD->BSRR = GPIO_PIN_10;
-						GPIOD->BSRR = GPIO_PIN_11;
-						htim3.Instance->CCR1 = 100;
-						htim3.Instance->CCR2 = 100;
-						htim3.Instance->CCR3 = 100;
-						htim3.Instance->CCR4 = 100;
-						for(uint8_t i = 0; i <LIMP_NUMBER; i++)
-						{
-							if (adc[i + 4] > 2900)
-							{
-			//					GPIOD->BSRR = (uint32_t)GPIO_PIN_11 << 16;
-		//						GPIOD->BSRR = GPIO_PIN_15;
-		//						GPIOD->BSRR = GPIO_PIN_14 << 16U;
-								HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11 >> i, 0);
-							}
-							else if(adc[i + 4] < 2800)
-							{
-		//						GPIOD->BSRR = GPIO_PIN_11;
-		//						GPIOD->BSRR = GPIO_PIN_14;
-								HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11 >> i, 1);
-							}
-			//				if(adc[4] > 2900)	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_11, 0);
-						}
-						if((GPIOD->ODR & (GPIO_PIN_10 | GPIO_PIN_11 )) == 0)
-						{
-							state = DEFLATING;
-							ILI9341_Draw_Text("  DEFLATING  ", 30, 200, BLUE, 2, BLACK);
-						}
-						break;
-					case DEFLATING:
-
-						recording = 1;
-						GPIOD->BSRR = GPIO_PIN_8 << 16U;
-						GPIOD->BSRR = GPIO_PIN_9 << 16U;
-						GPIOD->BSRR = GPIO_PIN_10 << 16U;
-						GPIOD->BSRR = GPIO_PIN_11 << 16U;
-						htim3.Instance->CCR1 = 85;
-						htim3.Instance->CCR2 = 85;
-						htim3.Instance->CCR3 = 85;
-						htim3.Instance->CCR4 = 85;
-						if(adc[4] < 700 && adc[5] < 700)
-						{
-							htim3.Instance->CCR1 = 0;
-							htim3.Instance->CCR2 = 0;
-							htim3.Instance->CCR3 = 0;
-							htim3.Instance->CCR4 = 0;
-							ILI9341_Draw_Text("CALCULATING", 30, 200, BLUE, 2, BLACK);
-							state = CALCULATING;
-
-						}
-						break;
-					case CALCULATING:
-
-
-						/*
-						 * wait for main loop done task
-						 */
-
-						//state = READY;
-						break;
-				  }
-		/*********************************************************************************************
-				  		 END STATE MACHINE
-		********************************************************************************************/
-					/*********************************************************
-					 * LCD DISPLAY
-					 ********************************************************/
-					for(int i = 0; i < 4; i++)
-					{
-						sprintf(&temp[0], "%6d", adc[i]);
-					//	ILI9341_Draw_Text("Test", 0, 240, RED, 1, BLACK);
-						ILI9341_Draw_Text(&temp[0], 150, 40 + i*40, RED, 1, BLACK);
-					}
-					for(int i = 0; i < 4; i++)
-					{
-						sprintf(&temp[0], "%6d", adc[i + 4]);
-					//	ILI9341_Draw_Text("Test", 0, 240, RED, 1, BLACK);
-						ILI9341_Draw_Text(&temp[0], 150, 20 + i*40, RED, 1, BLACK);
-					}
+		/*********************************************************
+		 * LCD DISPLAY
+		 ********************************************************/
+		for(int i = 0; i < 4; i++)
+		{
+			sprintf(&temp[0], "%6d", adc[i]);
+		//	ILI9341_Draw_Text("Test", 0, 240, RED, 1, BLACK);
+			ILI9341_Draw_Text(&temp[0], 150, 40 + i*40, RED, 1, BLACK);
+		}
+		for(int i = 0; i < 4; i++)
+		{
+			sprintf(&temp[0], "%6d", adc[i + 4]);
+		//	ILI9341_Draw_Text("Test", 0, 240, RED, 1, BLACK);
+			ILI9341_Draw_Text(&temp[0], 150, 20 + i*40, RED, 1, BLACK);
+		}
 	}
 }
 /* USER CODE END 4 */

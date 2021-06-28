@@ -10,13 +10,13 @@
 //#define calib_a	 	(float32_t)0.070
 //#define calib_b		(float32_t)21.271
 
-#define _start 200
+#define _start 30
 static int _stop;
 int pos; // index to run loop
-int k = 5; //window
-int h = 1.5; // constant to choose peak
+int k = 10; //window
+int h = 0.8; // constant to choose peak
 int MAP_pos;
-int MAP;
+float32_t MAP;
 int test;
 float32_t calib_a, calib_b;
 float32_t temp_sys;
@@ -29,7 +29,7 @@ static float left_hill = 0;
 //float32_t peak_envelop[MAX_LENGTH]={0};
 //signed int pulse_no_DC[MAX_LENGTH]= {0};
 
-static int trough;
+static float32_t trough;
 static int _trough;
 static int trough_pos;
 
@@ -43,7 +43,7 @@ static int trough_pos;
 		peak_step[i] = 0;
 		peak_envelop[i] = 0;
 		NIBP->pressure[i] = 0;
-		NIBP->Limp[index].pulse_prefilterred[i] = 0;
+		NIBP->pulse_filterred[i] = 0;
 		NIBP->pulse_prefilterred[i] = 0;
 
 	}
@@ -67,8 +67,8 @@ void find_peak (NIBP_Struct* NIBP, uint8_t index)
     //printf("stop at:%d \n", _stop);
     
     /* find peak funtion*/
-    int k = 5; //window
-    int h = 1.5; // constant to choose peak
+    int k = 10; //window
+    int h = 0.8; // constant to choose peak
     //int len = _stop - _start;
     int maxL, maxR;
     int _k; // index when run loop in k window
@@ -76,17 +76,17 @@ void find_peak (NIBP_Struct* NIBP, uint8_t index)
     for (pos= _start+k; pos <= _stop-k; pos++)
     {
         
-        maxL = NIBP->Limp[index].pulse_prefilterred[pos] - NIBP->Limp[index].pulse_prefilterred[pos-1];
-        maxR = NIBP->Limp[index].pulse_prefilterred[pos] - NIBP->Limp[index].pulse_prefilterred[pos+1];
+        maxL = NIBP->pulse_filterred[pos] - NIBP->pulse_filterred[pos-1];
+        maxR = NIBP->pulse_filterred[pos] - NIBP->pulse_filterred[pos+1];
         for (_k = 1; _k <= k; _k++)
         {
-            if(maxL < NIBP->Limp[index].pulse_prefilterred[pos]-NIBP->Limp[index].pulse_prefilterred[pos-_k])
+            if(maxL < NIBP->pulse_filterred[pos]-NIBP->pulse_filterred[pos-_k])
             {
-                maxL = NIBP->Limp[index].pulse_prefilterred[pos]-NIBP->Limp[index].pulse_prefilterred[pos-_k]; // find max of left window
+                maxL = NIBP->pulse_filterred[pos]-NIBP->pulse_filterred[pos-_k]; // find max of left window
             }
-            if(maxR < NIBP->Limp[index].pulse_prefilterred[pos]-NIBP->Limp[index].pulse_prefilterred[pos+_k])
+            if(maxR < NIBP->pulse_filterred[pos]-NIBP->pulse_filterred[pos+_k])
             {
-                maxR = NIBP->Limp[index].pulse_prefilterred[pos]-NIBP->Limp[index].pulse_prefilterred[pos+_k]; // find max of right window
+                maxR = NIBP->pulse_filterred[pos]-NIBP->pulse_filterred[pos+_k]; // find max of right window
             }
                 
         }
@@ -97,7 +97,7 @@ void find_peak (NIBP_Struct* NIBP, uint8_t index)
     
 
     /*mean of peak function*/
-    uint16_t total_S;
+    double total_S;// change uint16 to double
 
     for (pos = _start+k; pos <= _stop-k; pos++)
     {
@@ -107,7 +107,7 @@ void find_peak (NIBP_Struct* NIBP, uint8_t index)
     
     /*standar deviation of S*/
     float  dev_S;
-    uint16_t total_dev;
+    double total_dev;
     for (pos = _start+k; pos <= _stop-k; pos++)
     {
         total_dev += pow((NIBP->S_peak[pos] - (int)mean_S), 2);
@@ -120,9 +120,9 @@ void find_peak (NIBP_Struct* NIBP, uint8_t index)
 
     for (pos = _start+k; pos <= _stop-k; pos++)
     {
-        if ( (NIBP->S_peak[pos] > 0) && ((NIBP->S_peak[pos] - mean_S) > (h*dev_S)) && NIBP->Limp[index].pulse_prefilterred > 0) //if the peak function satisfy this is a local peak
+        if ( (NIBP->S_peak[pos] > 0) && ((NIBP->S_peak[pos] - mean_S) > (h*dev_S)) && NIBP->pulse_filterred > 0) //if the peak function satisfy this is a local peak
         {
-            NIBP->peak[pos] = NIBP->Limp[index].pulse_prefilterred[pos]; // put value of that pos to peak array
+            NIBP->peak[pos] = NIBP->pulse_filterred[pos]; // put value of that pos to peak array
 
             
         }
@@ -131,7 +131,7 @@ void find_peak (NIBP_Struct* NIBP, uint8_t index)
     }
 
     /* filter out smaller peak in a pair of peaks in a k window*/
-    int k2 = 15;
+    int k2 = 5;
     for (pos = _start+k; pos <= _stop-k; pos++)
     {
         if (NIBP->peak[pos] != 0 /*a peak*/)
@@ -158,35 +158,35 @@ void find_peak (NIBP_Struct* NIBP, uint8_t index)
     }
     /***find trough***/
     
-    //MAP = NIBP->Limp[index].pulse_prefilterred[MAP_pos];
+    //MAP = NIBP->pulse_filterred[MAP_pos];
     //printf("map pos is %d\n", MAP_pos);
 
 
 }
 
-float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP, uint8_t index)
+int find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP, uint8_t index)
 {
-    if(index == 0)
-    {
-    	calib_a = 0.041;
-    	calib_b = -2.8;
-    }
-    else if (index == 1)
-    {
-    	calib_a = 0.043;
-    	calib_b = -0.7;
-    }
-    else if (index == 2)
-    {
-    	calib_a = 0.044;
-    	calib_b = -7.1;
-    }
+//    if(index == 0)
+//    {
+//    	calib_a = 0.041;
+//    	calib_b = -2.8;
+//    }
+//    else if (index == 1)
+//    {
+//    	calib_a = 0.043;
+//    	calib_b = -0.7;
+//    }
+//    else if (index == 2)
+//    {
+//    	calib_a = 0.044;
+//    	calib_b = -7.1;
+//    }
 	MAP_pos = 0;
-    float32_t* temp1 = NULL;
-    float32_t* temp2 = NULL;
+//    float32_t* temp1 = NULL;
+//    float32_t* temp2 = NULL;
     for (pos= _start+k; pos <= _stop-k; pos++)
     {
-        if (NIBP->peak[pos] != 0)
+        if (NIBP->peak[pos] > 0)
         {
             if (NIBP->peak[pos] > NIBP->peak[MAP_pos])
             {
@@ -195,17 +195,17 @@ float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP,
             /*
              * while searching for MAP, ,we also find smaller peak in between two taller and average it
              */
-            if (NIBP->peak[pos] > *temp2 && temp2 != NULL)
-            {
-            	*temp2 = (NIBP->peak[pos] + *temp1)/2;
-            	temp1 = temp2;
-            }
-            if (NIBP->peak[pos] < *temp1) 	temp2 = &NIBP->peak[pos];
-            else
-            {
-            	temp1 = &NIBP->peak[pos];
-            	temp2 = NULL;
-            }
+//            if (NIBP->peak[pos] > *temp2 && temp2 != NULL)
+//            {
+//            	*temp2 = (NIBP->peak[pos] + *temp1)/2;
+//            	temp1 = temp2;
+//            }
+//            if (NIBP->peak[pos] < *temp1) 	temp2 = &NIBP->peak[pos];
+//            else
+//            {
+//            	temp1 = &NIBP->peak[pos];
+//            	temp2 = NULL;
+//            }
         }
     }
     //printf(" highest: %d \n", MAP_pos);
@@ -216,7 +216,7 @@ float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP,
     temp_map = MAP_pos;
     pos = temp_map;
     left_hill = 0;
-    for (left_peak = 0; left_peak < 4; left_peak++) // check all the peak at the left size
+    for (left_peak = 0; left_peak < 1; left_peak++) // check all the peak at the left size
     {
         if (NIBP->peak[pos] != 0 /*a peak*/)
         {
@@ -227,7 +227,7 @@ float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP,
             //printf("checkpoint1\n");
             while ((NIBP->peak[pos - _trough] == 0) && ((pos - _trough) > _start+k))
             {
-                
+
                 if (signal[pos - _trough] < trough) // find minima
                 {
                     trough = signal[pos - _trough];
@@ -247,15 +247,15 @@ float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP,
             pos = pos - _trough;
             //printf("map pos = %d\n", MAP_pos);
 
-        }  
+        }
         pos--;
-    } 
+    }
     //printf("right peaks start\n");
     //temp_map = MAP_pos;
     pos = MAP_pos;
     trough = 0;
     int right_peak = 0;
-    for (right_peak = 0; right_peak < 4; right_peak++) //check peak at right size
+    for (right_peak = 0; right_peak < 1; right_peak++) //check peak at right size
     {
         if (NIBP->peak[pos] != 0)// a peak
         {
@@ -284,48 +284,35 @@ float32_t find_MAP (float32_t signal[], uint16_t dc_signal[], NIBP_Struct *NIBP,
         pos++;
     }
     MAP_pos = temp_map;
+    for(int i = 500; i < MAX_LENGTH; i++)
+    {
+    	if(signal[i] > signal[MAP_pos])
+    	{
+    		MAP_pos = i;
+    	}
+    }
 
-    MAP = (float32_t)dc_signal[MAP_pos]*calib_a - calib_b;
+//    MAP = (float32_t)dc_signal[MAP_pos]*calib_a - calib_b;
     //printf("map pos = %d\n", MAP_pos);
     return MAP_pos;
 }
-void find_envelop(envelop_filter_Struct *filter, NIBP_Struct *NIBP)
+void find_envelop(NIBP_Struct *NIBP)
 {
-	uint16_t temp;
-	for (int i = _start; i < MAP_pos; i++)
-	{
-		if (NIBP->peak[i] != 0 && NIBP->peak[i] > temp )
-		{
-			temp = NIBP->peak[i];
-		}
-		NIBP->peak_step[i] = temp;
-	}
-	temp = 0;
-	for (int i = _stop; i > MAP_pos; i--)
-	{
-		if (NIBP->peak[i] != 0 && NIBP->peak[i] > temp)
-		{
-			temp = NIBP->peak[i];
-		}
-		NIBP->peak_step[i] = temp;
-	}
-	NIBP->peak_step[MAP_pos] = NIBP->peak[MAP_pos];
+    int peak_prev = 0;
+    for (int pos= _start; pos <= _stop; pos++)
+    {
+        if (NIBP->peak[pos] != 0)
+        {
+            for ( int i = peak_prev + 1; i < pos; i++)
+            {
+                NIBP->peak_envelop[i] = NIBP->peak[peak_prev] + (i - peak_prev)*(NIBP->peak[pos] - NIBP->peak[peak_prev])/(pos- peak_prev);
+            }
+            NIBP->peak_envelop[peak_prev] = NIBP->peak[peak_prev];
+            NIBP->peak_envelop[pos] = NIBP->peak[pos];
+            peak_prev = pos;
 
-	for(int i = 0; i < MAX_LENGTH/128; i++)
-	{
-		arm_fir_f32(&filter->S, (float32_t *)&NIBP->peak_step[0] + (i*128) , &NIBP->peak_envelop[0] + (i*128), filter->blockSize);
-	}
-	/*
-	for (int i = _start; i < MAX_LENGTH; i++) //avarage filter
-	{
-		float32_t sum = 0;
-		for(int j = 0; j < 40; j++) //average filter in window k = 20
-		{
-			sum = sum + NIBP->peak_step[i + j];
-		}
-		NIBP->peak_envelop[i] = sum / 40;
-	}
-	*/
+        }
+    }
 
 }
 float32_t find_SYS(NIBP_Struct *NIBP, uint8_t index)
@@ -333,20 +320,26 @@ float32_t find_SYS(NIBP_Struct *NIBP, uint8_t index)
 	float32_t Ks;
     if(index == 0)
     {
-    	calib_a = 0.041;
-    	calib_b = -2.8;
+    	calib_a = 0.043;
+    	calib_b = 8.7;
     }
     else if (index == 1)
     {
-    	calib_a = 0.043;
-    	calib_b = -0.7;
+    	calib_a = 0.040;
+    	calib_b = 7.6;
     }
     else if (index == 2)
     {
-    	calib_a = 0.044;
-    	calib_b = -7.1;
+    	calib_a = 0.039;
+    	calib_b = 4.2;
     }
-
+    else if (index == 3)
+	{
+		calib_a = 0.038;
+		calib_b = 2.5;
+	}
+//    MAP = (float32_t)(NIBP->Limp[index].pressure[MAP_pos]*calib_a - calib_b);
+    MAP = NIBP->Limp[index].pressure[MAP_pos];
 	if (MAP > 200) Ks = 0.5;
 	else if(MAP < 200 && MAP > 150) Ks = 0.29;
 	else if(MAP < 150 && MAP > 135) Ks = 0.45;
@@ -355,15 +348,16 @@ float32_t find_SYS(NIBP_Struct *NIBP, uint8_t index)
 	else if(MAP < 110 && MAP > 70)  Ks = 0.58;
 	else if(MAP < 70) 				Ks = 0.64;
 
-	//Sys_pulse = ((Ks * NIBP->Limp[index].pulse_prefilterred[MAP_pos]) + calib_b) / calib_a;
-	Sys_pulse = Ks * NIBP->Limp[index].pulse_prefilterred[MAP_pos];
+	Sys_pulse = ((Ks * NIBP->pulse_filterred[MAP_pos]) + calib_b) / calib_a;
+
+//	Sys_pulse = Ks * NIBP->pulse_filterred[MAP_pos];
 	temp_sys = MAXFLOAT;
 	for (int i = 0; i < MAP_pos; i++)
 	{
 		if(NIBP->peak[i] > 0)
 		test++;
 		{
-			if(abs(Sys_pulse - NIBP->peak[i]) < temp_sys)
+			if(abs(Sys_pulse - NIBP->peak_envelop[i]) < temp_sys)
 			{
 				temp_sys = abs(Sys_pulse - NIBP->peak[i]);
 				Sys_pos = i;
@@ -383,7 +377,22 @@ float32_t find_SYS(NIBP_Struct *NIBP, uint8_t index)
 	return Sys;
 
 }
-
+float32_t find_abi(float32_t* limp)
+{
+	float32_t a, b, c;
+	if (limp[0] > limp[1])
+	{
+		a = limp[0];
+	}
+	else a = limp[1];
+	if (limp[2] > limp[3])
+	{
+		b = limp[2];
+	}
+	else b = limp[3];
+	c = b/a;
+	return c;
+}
 
 /*void remove_DC(uint16_t pulse[], float a)
 {
